@@ -4,6 +4,22 @@
 
 **PulseTracker** manages hardware *after* it's sold — the full post-sale asset lifecycle plus the people and companies who own it. Add equipment to your "fleet" with production, sales, status and owner details, attach supporting files, then double-click any asset to see its complete history. An Analytics view breaks down ownership across individual and company owners with interactive pie charts. It's a single-file desktop app with a local database, built for a shared workshop/NAS setup (a single-instance lock stops two people writing at once). Wrapped in a worn, characterful "Starship Command Center" theme — with a hidden easter egg or two for the curious. Windows desktop app, built with Python/Tkinter.
 
+## Screenshots
+
+**Fleet Assets** — the main register of installed/sold hardware.
+
+![Fleet Assets](docs/screenshots/fleet-assets.png)
+
+**Add to Fleet** — multi-section form (Basic Info · Production · Sales & Status · Owner Details · Billing & Shipping · Attachments).
+
+![Add to Fleet](docs/screenshots/add-to-fleet.png)
+
+**Analytics** — asset ownership broken down by individual and company owner.
+
+![Analytics](docs/screenshots/analytics.png)
+
+> There may also be something hidden in the depths for those who go looking. 🛸
+
 ## Core Modules
 - **Equipment (Field Assets)** — primary tab for tracking installed/sold assets with full lifecycle details.
 - **Analytics** — visualise asset distribution by individual and company owners with interactive pie charts.
