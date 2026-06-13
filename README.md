@@ -18,7 +18,9 @@
 
 ![Analytics](docs/screenshots/analytics.png)
 
-> There may also be something hidden in the depths for those who go looking. 🛸
+**THE VOID** 🛸 — click the status dot in the bottom-right footer three times to trip the "Dark Matter" trigger and unlock a hidden tab with a fully playable Asteroids game. *("RIFT DETECTED. You've found the void. The database is now watching you.")*
+
+![THE VOID - Asteroids](docs/screenshots/the-void.png)
 
 ## Core Modules
 - **Equipment (Field Assets)** — primary tab for tracking installed/sold assets with full lifecycle details.
@@ -58,4 +60,4 @@ Standalone Windows executable:
 See [`BUILD_GUIDE.md`](BUILD_GUIDE.md) for more detail.
 
 ## License
-[MIT](LICENSE) — open source, do whatever you like with it.
+[The Unlicense](LICENSE) — released into the public domain. No copyright, do whatever you like with it.
