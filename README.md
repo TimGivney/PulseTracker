@@ -1,8 +1,8 @@
-# PulseTracker v5.0 — Command Center 🚀
+# PulseTracker v5.5 — Asset Management System 🚀
 
 ## What it does
 
-**PulseTracker** manages hardware *after* it's sold — the full post-sale asset lifecycle plus the people and companies who own it. Add equipment to your "fleet" with production, sales, status and owner details, attach supporting files, then double-click any asset to see its complete history. An Analytics view breaks down ownership across individual and company owners with interactive pie charts. It's a single-file desktop app with a local database, built for a shared workshop/NAS setup (a single-instance lock stops two people writing at once). Wrapped in a worn, characterful "Starship Command Center" theme — with a hidden easter egg or two for the curious. Windows desktop app, built with Python/Tkinter.
+**PulseTracker** manages hardware *after* it's sold — the full post-sale asset lifecycle plus the people and companies who own it. Add equipment to your "fleet" with production, sales, status and owner details, attach supporting files, then double-click any asset to see its complete history. An Analytics view breaks down ownership across individual and company owners with interactive pie charts. It's a single-file desktop app with a local database, built for a shared workshop/NAS setup (a single-instance lock stops two people writing at once). Presents a clean, professional interface by default, with a hidden "Dark Matter" alter-ego — a worn "Starship Command Center" theme and an easter egg or two — for the curious. Windows desktop app, built with Python/Tkinter.
 
 ## Screenshots
 

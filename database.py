@@ -18,13 +18,13 @@ class DatabaseManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             
-
+            # 1. Equipment Table - Refactored for v5.0+ Deep Data Collection
+            # Removed all Python-style comments from inside the SQL string to fix "unrecognized token: #" error
             cursor.execute("""CREATE TABLE IF NOT EXISTS equipment (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 serial_number TEXT UNIQUE NOT NULL,
                 
-
                 manufacture_date DATE,
                 manufacture_location TEXT,
                 batch_id TEXT,
@@ -32,7 +32,6 @@ class DatabaseManager:
                 job_number TEXT,
                 qa_status TEXT,
                 
-
                 sale_status TEXT,
                 sale_date DATE,
                 invoice_number TEXT,
@@ -40,13 +39,11 @@ class DatabaseManager:
                 install_date DATE,
                 status TEXT DEFAULT 'Active',
                 
-
                 owner_individual TEXT,
                 owner_company TEXT,
                 owner_notes TEXT,
                 location TEXT,
                 
-
                 billing_address TEXT,
                 billing_suburb TEXT,
                 billing_state TEXT,
@@ -54,7 +51,6 @@ class DatabaseManager:
                 billing_country TEXT,
                 payment_methods TEXT,
                 
-
                 shipping_address TEXT,
                 shipping_suburb TEXT,
                 shipping_state TEXT,
@@ -62,12 +58,11 @@ class DatabaseManager:
                 shipping_country TEXT,
                 parts_destination TEXT,
                 
-
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 notes TEXT
             )""")
 
-
+            # 2. Attachments
             cursor.execute("""CREATE TABLE IF NOT EXISTS attachments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 equipment_id INTEGER,
@@ -79,7 +74,7 @@ class DatabaseManager:
                 FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
             )""")
 
-
+            # 3. High Scores Table
             cursor.execute("""CREATE TABLE IF NOT EXISTS high_scores (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_name TEXT DEFAULT 'Pilot',
@@ -88,7 +83,7 @@ class DatabaseManager:
                 achieved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""")
 
-
+            # 4. Settings
             cursor.execute("""CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT
@@ -97,7 +92,7 @@ class DatabaseManager:
             conn.commit()
 
     def add_equipment(self, data):
-        """Add equipment with full v5.0 details"""
+        """Add equipment with full v5.0+ details"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             keys = data.keys()
