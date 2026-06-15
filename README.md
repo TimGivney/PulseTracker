@@ -18,7 +18,13 @@
 
 ![Analytics](docs/screenshots/analytics.png)
 
-**THE VOID** 🛸 — click the status dot in the bottom-right footer three times to trip the "Dark Matter" trigger and unlock a hidden tab with a fully playable Asteroids game. *("RIFT DETECTED. You've found the void. The database is now watching you.")*
+### 🛸 Easter egg: THE VOID
+
+Click the status dot in the bottom-right footer **three times** to trip the hidden "Dark Matter" trigger. The database "wakes up" and a secret tab appears:
+
+![RIFT ACTIVATED](docs/screenshots/easter-egg-rift.png)
+
+...unlocking **THE VOID** — a fully playable Asteroids game tucked inside your asset tracker:
 
 ![THE VOID - Asteroids](docs/screenshots/the-void.png)
 
