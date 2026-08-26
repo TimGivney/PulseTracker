@@ -6,6 +6,8 @@ import sys
 import random
 import math
 import time
+import sqlite3
+import pandas as pd
 from PIL import Image, ImageTk, ImageDraw
 
 # PulseTracker v5.5 - Asset Management System
@@ -114,23 +116,49 @@ class PulseTrackerApp:
         tab_text = self.notebook.tab(selected_tab, "text")
         if tab_text == "ANALYTICS":
             self.refresh_analytics()
+        elif tab_text == "THE VOID":
+            self.refresh_leaderboard()
 
     def setup_equipment_view(self):
-        self.equip_tab.grid_rowconfigure(1, weight=1)
+        self.equip_tab.grid_rowconfigure(2, weight=1)
         self.equip_tab.grid_columnconfigure(0, weight=1)
         
+        # Header Row
         header = tk.Frame(self.equip_tab, bg=PT_OBSIDIAN)
-        header.grid(row=0, column=0, sticky="ew", pady=10, padx=15)
+        header.grid(row=0, column=0, sticky="ew", pady=5, padx=15)
         tk.Label(header, text="FLEET ASSETS", font=("Courier", 20, "bold"), 
                  bg=PT_OBSIDIAN, fg=PT_NEON_EMERALD).pack(side=tk.LEFT)
         
-        btn_frame = tk.Frame(self.equip_tab, bg=PT_OBSIDIAN)
-        btn_frame.grid(row=0, column=0, sticky="e", padx=15, pady=10)
-        tk.Button(btn_frame, text="+ ADD TO FLEET", bg=PT_AMBER_ALERT, fg=PT_VOID_BLACK, 
-                 font=("Courier", 11, "bold"), command=self.open_add_to_fleet, padx=15, pady=8).pack(side=tk.RIGHT, padx=5)
+        btn_frame = tk.Frame(header, bg=PT_OBSIDIAN)
+        btn_frame.pack(side=tk.RIGHT)
 
+        tk.Button(btn_frame, text="EXPORT DATA", bg=PT_DEEP_SPACE, fg=PT_NEON_EMERALD,
+                 font=("Courier", 10, "bold"), command=self.export_fleet_data, padx=10, pady=6, relief=tk.RAISED).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(btn_frame, text="+ ADD TO FLEET", bg=PT_AMBER_ALERT, fg=PT_VOID_BLACK, 
+                 font=("Courier", 11, "bold"), command=self.open_add_to_fleet, padx=15, pady=6).pack(side=tk.LEFT, padx=5)
+
+        # Search & Filter Toolbar
+        filter_bar = tk.Frame(self.equip_tab, bg=PT_DEEP_SPACE, bd=1, relief=tk.RAISED)
+        filter_bar.grid(row=1, column=0, sticky="ew", padx=15, pady=(5, 10))
+
+        tk.Label(filter_bar, text="SEARCH:", bg=PT_DEEP_SPACE, fg=PT_AMBER_ALERT, font=("Courier", 10, "bold")).pack(side=tk.LEFT, padx=(10, 5), pady=8)
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *args: self.refresh_equipment())
+        search_entry = tk.Entry(filter_bar, textvariable=self.search_var, bg=PT_VOID_BLACK, fg=PT_NEON_EMERALD, font=("Courier", 10), width=25, insertbackground=PT_NEON_EMERALD)
+        search_entry.pack(side=tk.LEFT, padx=5, pady=8)
+
+        tk.Label(filter_bar, text="STATUS:", bg=PT_DEEP_SPACE, fg=PT_AMBER_ALERT, font=("Courier", 10, "bold")).pack(side=tk.LEFT, padx=(15, 5), pady=8)
+        self.status_filter_var = tk.StringVar(value="All")
+        status_combobox = ttk.Combobox(filter_bar, textvariable=self.status_filter_var, values=["All", "Active", "In Production", "Built", "In Stock", "Maintenance", "Retired"], state="readonly", width=15, font=("Courier", 10))
+        status_combobox.pack(side=tk.LEFT, padx=5, pady=8)
+        status_combobox.bind("<<ComboboxSelected>>", lambda e: self.refresh_equipment())
+
+        tk.Button(filter_bar, text="RESET", bg=PT_VOID_BLACK, fg=PT_NEON_EMERALD, font=("Courier", 9, "bold"), command=self.reset_search_filter, padx=8).pack(side=tk.LEFT, padx=10, pady=8)
+
+        # Treeview Table
         tree_frame = tk.Frame(self.equip_tab, bg=PT_OBSIDIAN)
-        tree_frame.grid(row=1, column=0, sticky="nsew", padx=15, pady=10)
+        tree_frame.grid(row=2, column=0, sticky="nsew", padx=15, pady=(0, 10))
         tree_frame.grid_rowconfigure(0, weight=1)
         tree_frame.grid_columnconfigure(0, weight=1)
         
@@ -145,6 +173,34 @@ class PulseTrackerApp:
         for col in ("ID", "Name", "Serial", "Owner", "Status", "Location"):
             self.equip_tree.heading(col, text=col.upper())
             self.equip_tree.column(col, width=120)
+
+    def reset_search_filter(self):
+        self.search_var.set("")
+        self.status_filter_var.set("All")
+        self.refresh_equipment()
+
+    def export_fleet_data(self):
+        df = self.db.export_all_equipment()
+        if df.empty:
+            messagebox.showinfo("Export Fleet Data", "No equipment records to export.")
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV Files", "*.csv"), ("Excel Files", "*.xlsx")],
+            title="Export Fleet Database"
+        )
+        if not file_path:
+            return
+
+        try:
+            if file_path.endswith(".xlsx"):
+                df.to_excel(file_path, index=False)
+            else:
+                df.to_csv(file_path, index=False)
+            messagebox.showinfo("Export Successful", f"Fleet records exported to:\n{file_path}")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Failed to export data: {str(e)}")
 
     def open_add_to_fleet(self):
         window = tk.Toplevel(self.root)
@@ -199,7 +255,7 @@ class PulseTrackerApp:
         tk.Button(btn_frame, text="COMMIT TO FLEET", bg=PT_AMBER_ALERT, fg=PT_VOID_BLACK, 
                  font=("Courier", 12, "bold"), command=lambda: self.save_equipment(window), padx=20, pady=10).pack(fill=tk.X)
 
-    def create_basic_info_fields(self, frame):
+    def create_basic_info_fields(self, frame, equip=None):
         fields = [
             ("EQUIPMENT NAME:", "equip_name"),
             ("SERIAL NUMBER:", "serial"),
@@ -211,10 +267,17 @@ class PulseTrackerApp:
             entry = tk.Entry(frame, width=50, bg=PT_VOID_BLACK, fg=PT_NEON_EMERALD, font=("Courier", 11), insertbackground=PT_NEON_EMERALD)
             entry.grid(row=i, column=1, padx=15, pady=12, sticky="ew")
             self.basic_entries[key] = entry
+
+            if equip:
+                val = ""
+                if key == "equip_name": val = equip['name'] if isinstance(equip, sqlite3.Row) else equip[1]
+                elif key == "serial": val = equip['serial_number'] if isinstance(equip, sqlite3.Row) else equip[2]
+                elif key == "location": val = equip['location'] if isinstance(equip, sqlite3.Row) else equip[18]
+                if val: entry.insert(0, str(val))
         
         frame.grid_columnconfigure(1, weight=1)
 
-    def create_production_fields(self, frame):
+    def create_production_fields(self, frame, equip=None):
         fields = [
             ("MANUFACTURE DATE:", "mfg_date"),
             ("MANUFACTURE LOCATION:", "mfg_loc"),
@@ -228,22 +291,40 @@ class PulseTrackerApp:
             entry = tk.Entry(frame, width=50, bg=PT_VOID_BLACK, fg=PT_NEON_EMERALD, font=("Courier", 11), insertbackground=PT_NEON_EMERALD)
             entry.grid(row=i, column=1, padx=15, pady=12, sticky="ew")
             self.prod_entries[key] = entry
+
+            if equip:
+                val = ""
+                if key == "mfg_date": val = equip['manufacture_date'] if isinstance(equip, sqlite3.Row) else equip[3]
+                elif key == "mfg_loc": val = equip['manufacture_location'] if isinstance(equip, sqlite3.Row) else equip[4]
+                elif key == "batch_id": val = equip['batch_id'] if isinstance(equip, sqlite3.Row) else equip[5]
+                elif key == "batch_size": val = equip['batch_size'] if isinstance(equip, sqlite3.Row) else equip[6]
+                elif key == "job_num": val = equip['job_number'] if isinstance(equip, sqlite3.Row) else equip[7]
+                if val is not None: entry.insert(0, str(val))
         
         tk.Label(frame, text="QA STATUS:", bg=PT_DEEP_SPACE, fg=PT_AMBER_ALERT, font=("Courier", 12, "bold")).grid(row=5, column=0, sticky=tk.W, padx=15, pady=12)
-        self.qa_var = tk.StringVar(value="Passed")
+        initial_qa = "Passed"
+        if equip:
+            initial_qa = (equip['qa_status'] if isinstance(equip, sqlite3.Row) else equip[8]) or "Passed"
+        self.qa_var = tk.StringVar(value=initial_qa)
         qa_combo = ttk.Combobox(frame, textvariable=self.qa_var, values=["Passed", "Hold", "Rework"], width=47, font=("Courier", 11))
         qa_combo.grid(row=5, column=1, padx=15, pady=12, sticky="ew")
         
         frame.grid_columnconfigure(1, weight=1)
 
-    def create_sales_fields(self, frame):
+    def create_sales_fields(self, frame, equip=None):
+        initial_sale_status = "Sold"
+        initial_status = "Active"
+        if equip:
+            initial_sale_status = (equip['sale_status'] if isinstance(equip, sqlite3.Row) else equip[9]) or "Sold"
+            initial_status = (equip['status'] if isinstance(equip, sqlite3.Row) else equip[14]) or "Active"
+
         tk.Label(frame, text="SALE STATUS:", bg=PT_DEEP_SPACE, fg=PT_AMBER_ALERT, font=("Courier", 12, "bold")).grid(row=0, column=0, sticky=tk.W, padx=15, pady=12)
-        self.sale_status_var = tk.StringVar(value="Sold")
+        self.sale_status_var = tk.StringVar(value=initial_sale_status)
         sale_combo = ttk.Combobox(frame, textvariable=self.sale_status_var, values=["Unsold", "Quoted", "Sold", "Delivered"], width=47, font=("Courier", 11))
         sale_combo.grid(row=0, column=1, padx=15, pady=12, sticky="ew")
         
         tk.Label(frame, text="LIFECYCLE STATUS:", bg=PT_DEEP_SPACE, fg=PT_AMBER_ALERT, font=("Courier", 12, "bold")).grid(row=1, column=0, sticky=tk.W, padx=15, pady=12)
-        self.status_var = tk.StringVar(value="Active")
+        self.status_var = tk.StringVar(value=initial_status)
         status_combo = ttk.Combobox(frame, textvariable=self.status_var, values=["In Production", "Built", "In Stock", "Active", "Maintenance", "Retired"], width=47, font=("Courier", 11))
         status_combo.grid(row=1, column=1, padx=15, pady=12, sticky="ew")
         
@@ -258,10 +339,17 @@ class PulseTrackerApp:
             entry = tk.Entry(frame, width=50, bg=PT_VOID_BLACK, fg=PT_NEON_EMERALD, font=("Courier", 11), insertbackground=PT_NEON_EMERALD)
             entry.grid(row=i, column=1, padx=15, pady=12, sticky="ew")
             self.sales_entries[key] = entry
+
+            if equip:
+                val = ""
+                if key == "sale_date": val = equip['sale_date'] if isinstance(equip, sqlite3.Row) else equip[10]
+                elif key == "invoice": val = equip['invoice_number'] if isinstance(equip, sqlite3.Row) else equip[11]
+                elif key == "warranty": val = equip['warranty_end'] if isinstance(equip, sqlite3.Row) else equip[12]
+                if val: entry.insert(0, str(val))
         
         frame.grid_columnconfigure(1, weight=1)
 
-    def create_owner_fields(self, frame):
+    def create_owner_fields(self, frame, equip=None):
         fields = [
             ("INDIVIDUAL OWNER:", "owner_individual"),
             ("COMPANY OWNER:", "owner_company"),
@@ -276,10 +364,21 @@ class PulseTrackerApp:
                 entry = tk.Entry(frame, width=50, bg=PT_VOID_BLACK, fg=PT_NEON_EMERALD, font=("Courier", 11), insertbackground=PT_NEON_EMERALD)
             entry.grid(row=i, column=1, padx=15, pady=12, sticky="ew")
             self.owner_entries[key] = entry
+
+            if equip:
+                if key == "owner_individual":
+                    val = equip['owner_individual'] if isinstance(equip, sqlite3.Row) else equip[15]
+                    if val: entry.insert(0, str(val))
+                elif key == "owner_company":
+                    val = equip['owner_company'] if isinstance(equip, sqlite3.Row) else equip[16]
+                    if val: entry.insert(0, str(val))
+                elif key == "owner_notes":
+                    val = equip['owner_notes'] if isinstance(equip, sqlite3.Row) else equip[17]
+                    if val: entry.insert("1.0", str(val))
         
         frame.grid_columnconfigure(1, weight=1)
 
-    def create_billing_shipping_fields(self, frame):
+    def create_billing_shipping_fields(self, frame, equip=None):
         canvas = tk.Canvas(frame, bg=PT_DEEP_SPACE, highlightthickness=0)
         scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg=PT_DEEP_SPACE)
@@ -308,6 +407,11 @@ class PulseTrackerApp:
             entry = tk.Entry(scrollable_frame, width=50, bg=PT_VOID_BLACK, fg=PT_NEON_EMERALD, font=("Courier", 10), insertbackground=PT_NEON_EMERALD)
             entry.grid(row=i, column=1, padx=15, pady=10, sticky="ew")
             self.billing_entries[key] = entry
+
+            if equip:
+                db_col = key
+                val = equip[db_col] if isinstance(equip, sqlite3.Row) else None
+                if val is not None: entry.insert(0, str(val))
         
         tk.Label(scrollable_frame, text="SHIPPING ADDRESS", bg=PT_DEEP_SPACE, fg=PT_PLASMA_RED, font=("Courier", 12, "bold")).grid(row=7, column=0, columnspan=2, sticky=tk.W, padx=15, pady=12)
         
@@ -325,6 +429,11 @@ class PulseTrackerApp:
             entry = tk.Entry(scrollable_frame, width=50, bg=PT_VOID_BLACK, fg=PT_NEON_EMERALD, font=("Courier", 10), insertbackground=PT_NEON_EMERALD)
             entry.grid(row=i, column=1, padx=15, pady=10, sticky="ew")
             self.shipping_entries[key] = entry
+
+            if equip:
+                db_col = key
+                val = equip[db_col] if isinstance(equip, sqlite3.Row) else None
+                if val is not None: entry.insert(0, str(val))
         
         scrollable_frame.grid_columnconfigure(1, weight=1)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -350,60 +459,74 @@ class PulseTrackerApp:
             self.attached_files.append((filename, file_path))
             self.attachment_listbox.insert(tk.END, filename)
 
-    def save_equipment(self, window):
+    def save_equipment(self, window, equip_id=None):
         try:
+            batch_size_str = self.prod_entries['batch_size'].get().strip()
+            batch_size_val = 1
+            if batch_size_str:
+                if not batch_size_str.isdigit() or int(batch_size_str) <= 0:
+                    messagebox.showwarning("Validation Error", "Batch Size must be a positive integer.")
+                    return
+                batch_size_val = int(batch_size_str)
+
             data = {
-                'name': self.basic_entries['equip_name'].get(),
-                'serial_number': self.basic_entries['serial'].get(),
-                'location': self.basic_entries['location'].get(),
-                'manufacture_date': self.prod_entries['mfg_date'].get() or None,
-                'manufacture_location': self.prod_entries['mfg_loc'].get(),
-                'batch_id': self.prod_entries['batch_id'].get(),
-                'batch_size': int(self.prod_entries['batch_size'].get() or 1),
-                'job_number': self.prod_entries['job_num'].get(),
+                'name': self.basic_entries['equip_name'].get().strip(),
+                'serial_number': self.basic_entries['serial'].get().strip(),
+                'location': self.basic_entries['location'].get().strip(),
+                'manufacture_date': self.prod_entries['mfg_date'].get().strip() or None,
+                'manufacture_location': self.prod_entries['mfg_loc'].get().strip(),
+                'batch_id': self.prod_entries['batch_id'].get().strip(),
+                'batch_size': batch_size_val,
+                'job_number': self.prod_entries['job_num'].get().strip(),
                 'qa_status': self.qa_var.get(),
                 'sale_status': self.sale_status_var.get(),
-                'sale_date': self.sales_entries['sale_date'].get() or None,
-                'invoice_number': self.sales_entries['invoice'].get(),
-                'warranty_end': self.sales_entries['warranty'].get() or None,
-                'install_date': datetime.now().strftime("%Y-%m-%d"),
+                'sale_date': self.sales_entries['sale_date'].get().strip() or None,
+                'invoice_number': self.sales_entries['invoice'].get().strip(),
+                'warranty_end': self.sales_entries['warranty'].get().strip() or None,
                 'status': self.status_var.get(),
-                'owner_individual': self.owner_entries['owner_individual'].get(),
-                'owner_company': self.owner_entries['owner_company'].get(),
+                'owner_individual': self.owner_entries['owner_individual'].get().strip(),
+                'owner_company': self.owner_entries['owner_company'].get().strip(),
                 'owner_notes': self.owner_entries['owner_notes'].get("1.0", tk.END).strip(),
-                'billing_address': self.billing_entries['billing_address'].get(),
-                'billing_suburb': self.billing_entries['billing_suburb'].get(),
-                'billing_state': self.billing_entries['billing_state'].get(),
-                'billing_postcode': self.billing_entries['billing_postcode'].get(),
-                'billing_country': self.billing_entries['billing_country'].get(),
-                'payment_methods': self.billing_entries['payment_methods'].get(),
-                'shipping_address': self.shipping_entries['shipping_address'].get(),
-                'shipping_suburb': self.shipping_entries['shipping_suburb'].get(),
-                'shipping_state': self.shipping_entries['shipping_state'].get(),
-                'shipping_postcode': self.shipping_entries['shipping_postcode'].get(),
-                'shipping_country': self.shipping_entries['shipping_country'].get(),
-                'parts_destination': self.shipping_entries['parts_destination'].get(),
+                'billing_address': self.billing_entries['billing_address'].get().strip(),
+                'billing_suburb': self.billing_entries['billing_suburb'].get().strip(),
+                'billing_state': self.billing_entries['billing_state'].get().strip(),
+                'billing_postcode': self.billing_entries['billing_postcode'].get().strip(),
+                'billing_country': self.billing_entries['billing_country'].get().strip(),
+                'payment_methods': self.billing_entries['payment_methods'].get().strip(),
+                'shipping_address': self.shipping_entries['shipping_address'].get().strip(),
+                'shipping_suburb': self.shipping_entries['shipping_suburb'].get().strip(),
+                'shipping_state': self.shipping_entries['shipping_state'].get().strip(),
+                'shipping_postcode': self.shipping_entries['shipping_postcode'].get().strip(),
+                'shipping_country': self.shipping_entries['shipping_country'].get().strip(),
+                'parts_destination': self.shipping_entries['parts_destination'].get().strip(),
             }
             
             if not data['name'] or not data['serial_number']:
                 messagebox.showwarning("Incomplete Data", "Name and Serial Number are mandatory for the fleet records.")
                 return
 
-            equip_id = self.db.add_equipment(data)
-            
-            for filename, filepath in self.attached_files:
-                self.db.add_attachment(equip_id, filename, filepath)
+            if equip_id:
+                self.db.update_equipment(equip_id, data)
+                target_id = equip_id
+            else:
+                data['install_date'] = datetime.now().strftime("%Y-%m-%d")
+                target_id = self.db.add_equipment(data)
+
+            for filename, filepath in getattr(self, 'attached_files', []):
+                self.db.add_attachment(target_id, filename, filepath)
             
             # v5.4: Professional messages unless Dark Matter Mode is active
             if self.dark_matter_mode:
-                msg = random.choice(TIRED_AI_REMARKS).format(n=equip_id)
+                msg = random.choice(TIRED_AI_REMARKS).format(n=target_id)
             else:
-                msg = random.choice(PROFESSIONAL_REMARKS).format(n=equip_id)
+                msg = random.choice(PROFESSIONAL_REMARKS).format(n=target_id)
                 
             messagebox.showinfo("FLEET UPDATED", msg)
             self.refresh_equipment()
             window.destroy()
             
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Duplicate Serial", f"An asset with Serial Number '{self.basic_entries['serial'].get()}' already exists.")
         except Exception as e:
             messagebox.showerror("SYSTEM ERROR", f"Failed to commit to fleet: {str(e)}")
 
@@ -411,13 +534,35 @@ class PulseTrackerApp:
         for item in self.equip_tree.get_children():
             self.equip_tree.delete(item)
         
-        for equip in self.db.get_all_equipment():
+        query = self.search_var.get() if hasattr(self, 'search_var') else None
+        status_filter = self.status_filter_var.get() if hasattr(self, 'status_filter_var') else None
+
+        records = self.db.search_equipment(query=query, status_filter=status_filter)
+        for equip in records:
+            if isinstance(equip, sqlite3.Row):
+                e_id = equip['id']
+                e_name = equip['name']
+                e_serial = equip['serial_number']
+                e_owner = equip['owner_company'] or equip['owner_individual'] or "N/A"
+                e_status = equip['status']
+                e_location = equip['location'] or "N/A"
+            else:
+                e_id = equip[0]
+                e_name = equip[1]
+                e_serial = equip[2]
+                e_owner = equip[16] or equip[15] or "N/A"
+                e_status = equip[14]
+                e_location = equip[18] or "N/A"
+
             self.equip_tree.insert("", tk.END, values=(
-                equip[0], equip[1], equip[2], equip[16] or equip[15], equip[14], equip[18]
+                e_id, e_name, e_serial, e_owner, e_status, e_location
             ))
 
     def on_equipment_double_click(self, event):
-        item = self.equip_tree.selection()[0]
+        selected = self.equip_tree.selection()
+        if not selected:
+            return
+        item = selected[0]
         equip_id = self.equip_tree.item(item, "values")[0]
         self.open_equipment_details(equip_id)
 
@@ -426,23 +571,44 @@ class PulseTrackerApp:
         if not equip: return
         
         window = tk.Toplevel(self.root)
+        name_val = equip['name'] if isinstance(equip, sqlite3.Row) else equip[1]
+        serial_val = equip['serial_number'] if isinstance(equip, sqlite3.Row) else equip[2]
+        location_val = equip['location'] if isinstance(equip, sqlite3.Row) else equip[18]
+        status_val = equip['status'] if isinstance(equip, sqlite3.Row) else equip[14]
+        owner_val = (equip['owner_company'] if isinstance(equip, sqlite3.Row) else equip[16]) or (equip['owner_individual'] if isinstance(equip, sqlite3.Row) else equip[15]) or "N/A"
+        mfg_date_val = equip['manufacture_date'] if isinstance(equip, sqlite3.Row) else equip[3]
+        invoice_val = equip['invoice_number'] if isinstance(equip, sqlite3.Row) else equip[11]
+
         # v5.5: Official Name Update
-        window.title(f"ASSET DETAILS: {equip[1]} - PulseTracker")
+        window.title(f"ASSET DETAILS: {name_val} - PulseTracker")
         window.geometry("1100x850")
         window.configure(bg=PT_OBSIDIAN)
         
-        tk.Label(window, text=f"ASSET DETAILS: {equip[1]}", font=("Courier", 18, "bold"), bg=PT_OBSIDIAN, fg=PT_NEON_EMERALD).pack(pady=10)
+        # Header & Actions
+        hdr_frame = tk.Frame(window, bg=PT_OBSIDIAN)
+        hdr_frame.pack(fill=tk.X, padx=20, pady=10)
+
+        tk.Label(hdr_frame, text=f"ASSET DETAILS: {name_val}", font=("Courier", 18, "bold"), bg=PT_OBSIDIAN, fg=PT_NEON_EMERALD).pack(side=tk.LEFT)
         
+        act_frame = tk.Frame(hdr_frame, bg=PT_OBSIDIAN)
+        act_frame.pack(side=tk.RIGHT)
+
+        tk.Button(act_frame, text="EDIT ASSET", bg=PT_AMBER_ALERT, fg=PT_VOID_BLACK, font=("Courier", 10, "bold"),
+                  command=lambda: [window.destroy(), self.open_edit_equipment(equip_id)]).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(act_frame, text="DELETE ASSET", bg=PT_PLASMA_RED, fg=PT_OFF_WHITE, font=("Courier", 10, "bold"),
+                  command=lambda: self.confirm_delete_equipment(equip_id, window)).pack(side=tk.LEFT, padx=5)
+
         details_frame = tk.Frame(window, bg=PT_DEEP_SPACE)
         details_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
         
         info = [
-            ("SERIAL:", equip[2]),
-            ("LOCATION:", equip[18]),
-            ("STATUS:", equip[14]),
-            ("OWNER:", equip[15] or equip[16]),
-            ("MFG DATE:", equip[3]),
-            ("INVOICE:", equip[11]),
+            ("SERIAL:", serial_val),
+            ("LOCATION:", location_val),
+            ("STATUS:", status_val),
+            ("OWNER:", owner_val),
+            ("MFG DATE:", mfg_date_val or "N/A"),
+            ("INVOICE:", invoice_val or "N/A"),
         ]
         
         for i, (label, val) in enumerate(info):
@@ -455,22 +621,97 @@ class PulseTrackerApp:
         
         attachments = self.db.get_attachments(equip_id)
         for att in attachments:
-            attach_list.insert(tk.END, att[2])
+            fname = att['filename'] if isinstance(att, sqlite3.Row) else att[2]
+            attach_list.insert(tk.END, fname)
             
         def download_attachment():
             if not attach_list.curselection(): return
             idx = attach_list.curselection()[0]
             att = attachments[idx]
-            save_path = filedialog.asksaveasfilename(initialfile=att[2])
+            fname = att['filename'] if isinstance(att, sqlite3.Row) else att[2]
+            fpath = att['filepath'] if isinstance(att, sqlite3.Row) else att[3]
+            save_path = filedialog.asksaveasfilename(initialfile=fname)
             if save_path:
                 try:
                     import shutil
-                    shutil.copy2(att[3], save_path)
+                    shutil.copy2(fpath, save_path)
                     messagebox.showinfo("SUCCESS", "File extracted from database.")
                 except Exception as e:
                     messagebox.showerror("ERROR", f"Failed to extract file: {e}")
 
-        tk.Button(window, text="EXTRACT SELECTED FILE", bg=PT_AMBER_ALERT, command=download_attachment).pack(pady=10)
+        def remove_attachment():
+            if not attach_list.curselection(): return
+            idx = attach_list.curselection()[0]
+            att = attachments[idx]
+            att_id = att['id'] if isinstance(att, sqlite3.Row) else att[0]
+            fname = att['filename'] if isinstance(att, sqlite3.Row) else att[2]
+            if messagebox.askyesno("Delete Attachment", f"Are you sure you want to delete '{fname}'?"):
+                self.db.delete_attachment(att_id)
+                window.destroy()
+                self.open_equipment_details(equip_id)
+
+        att_btn_frame = tk.Frame(window, bg=PT_OBSIDIAN)
+        att_btn_frame.pack(pady=10)
+
+        tk.Button(att_btn_frame, text="EXTRACT SELECTED FILE", bg=PT_AMBER_ALERT, fg=PT_VOID_BLACK, font=("Courier", 10, "bold"), command=download_attachment).pack(side=tk.LEFT, padx=5)
+        tk.Button(att_btn_frame, text="DELETE ATTACHMENT", bg=PT_PLASMA_RED, fg=PT_OFF_WHITE, font=("Courier", 10, "bold"), command=remove_attachment).pack(side=tk.LEFT, padx=5)
+
+    def open_edit_equipment(self, equip_id):
+        equip = self.db.get_equipment_by_id(equip_id)
+        if not equip: return
+
+        window = tk.Toplevel(self.root)
+        name_val = equip['name'] if isinstance(equip, sqlite3.Row) else equip[1]
+        window.title(f"EDIT ASSET: {name_val} - PulseTracker")
+        window.geometry("900x700")
+        window.configure(bg=PT_OBSIDIAN)
+        window.minsize(700, 500)
+
+        window.grid_rowconfigure(0, weight=1)
+        window.grid_columnconfigure(0, weight=1)
+
+        nb = ttk.Notebook(window)
+        nb.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+        basic_frame = tk.Frame(nb, bg=PT_DEEP_SPACE)
+        nb.add(basic_frame, text="BASIC INFO")
+        self.create_basic_info_fields(basic_frame, equip)
+
+        prod_frame = tk.Frame(nb, bg=PT_DEEP_SPACE)
+        nb.add(prod_frame, text="PRODUCTION")
+        self.create_production_fields(prod_frame, equip)
+
+        sales_frame = tk.Frame(nb, bg=PT_DEEP_SPACE)
+        nb.add(sales_frame, text="SALES & STATUS")
+        self.create_sales_fields(sales_frame, equip)
+
+        owner_frame = tk.Frame(nb, bg=PT_DEEP_SPACE)
+        nb.add(owner_frame, text="OWNER DETAILS")
+        self.create_owner_fields(owner_frame, equip)
+
+        billing_frame = tk.Frame(nb, bg=PT_DEEP_SPACE)
+        nb.add(billing_frame, text="BILLING & SHIPPING")
+        self.create_billing_shipping_fields(billing_frame, equip)
+
+        attach_frame = tk.Frame(nb, bg=PT_DEEP_SPACE)
+        nb.add(attach_frame, text="ATTACHMENTS")
+        self.create_attachments_section(attach_frame, window)
+
+        btn_frame = tk.Frame(window, bg=PT_OBSIDIAN)
+        btn_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
+        tk.Button(btn_frame, text="SAVE CHANGES", bg=PT_AMBER_ALERT, fg=PT_VOID_BLACK,
+                 font=("Courier", 12, "bold"), command=lambda: self.save_equipment(window, equip_id=equip_id), padx=20, pady=10).pack(fill=tk.X)
+
+    def confirm_delete_equipment(self, equip_id, window):
+        equip = self.db.get_equipment_by_id(equip_id)
+        if not equip: return
+        name_val = equip['name'] if isinstance(equip, sqlite3.Row) else equip[1]
+
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to permanently delete asset '{name_val}' and all its attachments?"):
+            self.db.delete_equipment(equip_id)
+            messagebox.showinfo("Asset Deleted", f"Asset '{name_val}' has been removed from the fleet.")
+            window.destroy()
+            self.refresh_equipment()
 
     def setup_analytics_view(self):
         tk.Label(self.analytics_tab, text="FLEET ANALYTICS", font=("Courier", 24, "bold"), bg=PT_OBSIDIAN, fg=PT_NEON_EMERALD).pack(pady=20)
@@ -533,14 +774,28 @@ class PulseTrackerApp:
         self.asteroids_tab.grid_rowconfigure(0, weight=1)
         self.asteroids_tab.grid_columnconfigure(0, weight=1)
         
-        self.game_canvas = tk.Canvas(self.asteroids_tab, bg=PT_VOID_BLACK, highlightthickness=0)
+        main_game_frame = tk.Frame(self.asteroids_tab, bg=PT_VOID_BLACK)
+        main_game_frame.grid(row=0, column=0, sticky="nsew")
+        main_game_frame.grid_rowconfigure(0, weight=1)
+        main_game_frame.grid_columnconfigure(0, weight=1)
+
+        self.game_canvas = tk.Canvas(main_game_frame, bg=PT_VOID_BLACK, highlightthickness=0)
         self.game_canvas.grid(row=0, column=0, sticky="nsew")
+
+        # Leaderboard Sidebar Frame
+        self.leaderboard_frame = tk.Frame(main_game_frame, bg=PT_DEEP_SPACE, width=220, bd=1, relief=tk.SOLID)
+        self.leaderboard_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+
+        tk.Label(self.leaderboard_frame, text="HALL OF FAME", font=("Courier", 12, "bold"), bg=PT_DEEP_SPACE, fg=PT_AMBER_ALERT).pack(pady=10)
         
+        self.leaderboard_list = tk.Listbox(self.leaderboard_frame, bg=PT_VOID_BLACK, fg=PT_NEON_EMERALD, font=("Courier", 9), bd=0, highlightthickness=0)
+        self.leaderboard_list.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
         self.score_label = tk.Label(self.asteroids_tab, text="SCORE: 0", bg=PT_VOID_BLACK, fg=PT_NEON_EMERALD, font=("Courier", 14, "bold"))
-        self.score_label.grid(row=1, column=0, sticky="ew", pady=10)
+        self.score_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=10)
         
         tk.Button(self.asteroids_tab, text="INITIALIZE COMBAT", bg=PT_PLASMA_RED, fg=PT_VOID_BLACK, 
-                 font=("Courier", 12, "bold"), command=self.start_asteroids_game).grid(row=2, column=0, pady=10)
+                 font=("Courier", 12, "bold"), command=self.start_asteroids_game).grid(row=2, column=0, columnspan=2, pady=10)
         
         self.game_active = False
         self.asteroids = []
@@ -554,6 +809,20 @@ class PulseTrackerApp:
         self.high_score = 0
         self.lives = 3
         self.round_num = 1
+        self.refresh_leaderboard()
+
+    def refresh_leaderboard(self):
+        self.leaderboard_list.delete(0, tk.END)
+        top_scores = self.db.get_top_scores(limit=10)
+        if top_scores:
+            self.high_score = top_scores[0]['score'] if isinstance(top_scores[0], sqlite3.Row) else top_scores[0][1]
+            for idx, row in enumerate(top_scores, start=1):
+                p_name = row['player_name'] if isinstance(row, sqlite3.Row) else row[0]
+                sc = row['score'] if isinstance(row, sqlite3.Row) else row[1]
+                rnd = row['round'] if isinstance(row, sqlite3.Row) else row[2]
+                self.leaderboard_list.insert(tk.END, f"{idx}. {p_name[:8]}: {sc} (R{rnd})")
+        else:
+            self.leaderboard_list.insert(tk.END, "No records yet.")
 
     def start_asteroids_game(self):
         if self.game_active: return
@@ -563,8 +832,8 @@ class PulseTrackerApp:
         self.round_num = 1
         self.asteroids = []
         self.bullets = []
-        self.player_x = self.game_canvas.winfo_width() / 2
-        self.player_y = self.game_canvas.winfo_height() / 2
+        self.player_x = self.game_canvas.winfo_width() / 2 or 400
+        self.player_y = self.game_canvas.winfo_height() / 2 or 300
         self.player_vel_x = 0
         self.player_vel_y = 0
         self.spawn_asteroids()
@@ -595,10 +864,12 @@ class PulseTrackerApp:
         })
 
     def spawn_asteroids(self):
+        cw = max(self.game_canvas.winfo_width(), 800)
+        ch = max(self.game_canvas.winfo_height(), 600)
         for _ in range(3 + self.round_num * 2):
             self.asteroids.append({
-                'x': random.randint(0, 800),
-                'y': random.randint(0, 600),
+                'x': random.randint(0, cw),
+                'y': random.randint(0, ch),
                 'vx': random.uniform(-2, 2),
                 'vy': random.uniform(-2, 2),
                 'size': random.randint(20, 40)
@@ -607,9 +878,12 @@ class PulseTrackerApp:
     def update_asteroids_game(self):
         if not self.game_active: return
         
+        cw = max(self.game_canvas.winfo_width(), 800)
+        ch = max(self.game_canvas.winfo_height(), 600)
+
         # Update player position with momentum
-        self.player_x = (self.player_x + self.player_vel_x) % self.game_canvas.winfo_width()
-        self.player_y = (self.player_y + self.player_vel_y) % self.game_canvas.winfo_height()
+        self.player_x = (self.player_x + self.player_vel_x) % cw
+        self.player_y = (self.player_y + self.player_vel_y) % ch
         
         # Apply friction
         self.player_vel_x *= 0.98
@@ -617,25 +891,27 @@ class PulseTrackerApp:
         
         # Update bullets
         for b in self.bullets[:]:
-            b['x'] = (b['x'] + b['vx']) % self.game_canvas.winfo_width()
-            b['y'] = (b['y'] + b['vy']) % self.game_canvas.winfo_height()
+            b['x'] = (b['x'] + b['vx']) % cw
+            b['y'] = (b['y'] + b['vy']) % ch
             b['life'] -= 1
             if b['life'] <= 0: self.bullets.remove(b)
             
         # Update asteroids
         for a in self.asteroids:
-            a['x'] = (a['x'] + a['vx']) % self.game_canvas.winfo_width()
-            a['y'] = (a['y'] + a['vy']) % self.game_canvas.winfo_height()
+            a['x'] = (a['x'] + a['vx']) % cw
+            a['y'] = (a['y'] + a['vy']) % ch
             
             # Collision with player
             dist = math.sqrt((a['x']-self.player_x)**2 + (a['y']-self.player_y)**2)
             if dist < a['size'] + 10:
                 self.lives -= 1
-                self.player_x, self.player_y = 400, 300
+                self.player_x, self.player_y = cw / 2, ch / 2
                 self.player_vel_x, self.player_vel_y = 0, 0
                 if self.lives <= 0:
                     self.game_active = False
-                    messagebox.showinfo("GAME OVER", f"Your fleet was overwhelmed. Score: {self.score}")
+                    self.db.save_high_score(self.score, self.round_num)
+                    self.refresh_leaderboard()
+                    messagebox.showinfo("GAME OVER", f"Your fleet was overwhelmed.\nScore: {self.score}\nRound: {self.round_num}")
                     return
 
         # Bullet-Asteroid collision
